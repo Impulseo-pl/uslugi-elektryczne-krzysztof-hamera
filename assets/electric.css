@@ -1,0 +1,402 @@
+/* =========================================================================
+   ELECTRIC - warstwa "pod napieciem" (iskry, przeplyw pradu, zaplon)
+   Wczytywana PO styles.css, wiec jej :root wygrywa z blokami bazowymi.
+
+   Skad paleta: firma ma jedna wlasna grafike reklamowa (wizytowka Google) -
+   narzedzia elektryka rozlozone na bialym tle, czarny gruby napis, zolto-
+   pomaranczowe akcenty (sciagacz izolacji, szczypce, zlaczki Wago).
+   Strona idzie w te sama strone: czyste biele, prawie czarny tekst,
+   bursztyn jako jedyny akcent, iskra jako element ruchu.
+   ========================================================================= */
+
+:root{
+  /* --- paleta w stylu grafiki firmowej: bialy papier, czarny tusz, bursztyn --- */
+  --paper:#fbfaf8;
+  --paper-2:#f1efea;
+  --paper-3:#f1efea;
+  --ink:#14161a;
+  --ink-soft:#2b2f36;
+  --line:rgba(20,22,26,.13);
+  --dark:#14161a;
+  --accent:#f0a90c;
+  --accent-d:#b87d06;
+  --accent-soft:rgba(240,169,12,.10);
+
+  /* --- barwy luku elektrycznego (tylko efekty, nigdy tekst) --- */
+  --volt:#ffc21a;
+  --volt-hot:#ff7a18;
+  --volt-arc:#fff6db;
+}
+
+/* =========================================================================
+   1) PASEK NAPIECIA - postep czytania jako przewod pod napieciem
+   ========================================================================= */
+.volt-bar{
+  position:fixed;left:0;top:0;height:2px;width:100%;
+  z-index:130;pointer-events:none;background:rgba(20,22,26,.07);
+}
+.volt-bar i{
+  position:relative;display:block;height:100%;
+  /* max(): przy samej gorze strony pasek ma jeszcze 3 px, zeby nie byl ozdoba
+     o rozmiarze zero - taki element bramka wyglądu zglasza jako blad. */
+  width:max(3px,var(--volt-p,0%));
+  background:linear-gradient(90deg,var(--volt-hot) 0%,var(--volt) 55%,var(--volt-arc) 100%);
+  box-shadow:0 0 10px 1px rgba(255,194,26,.75),0 0 26px 3px rgba(255,122,24,.32);
+}
+.volt-bar i::after{
+  content:"";position:absolute;top:-2px;right:-3px;width:6px;height:6px;border-radius:50%;
+  background:var(--volt-arc);box-shadow:0 0 10px 3px var(--volt),0 0 22px 6px rgba(255,122,24,.5);
+}
+
+/* =========================================================================
+   2) SZYNA POD NAWIGACJA - impuls przebiega raz na kilka sekund
+   ========================================================================= */
+.volt-busbar{
+  position:absolute;left:0;right:0;bottom:0;height:1px;pointer-events:none;overflow:hidden;
+}
+.volt-busbar::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent 0%,var(--volt) 45%,var(--volt-arc) 50%,var(--volt) 55%,transparent 100%);
+  background-size:34% 100%;background-repeat:no-repeat;
+  filter:drop-shadow(0 0 5px rgba(255,194,26,.9));
+  animation:volt-run 5.6s linear infinite;
+}
+@keyframes volt-run{
+  0%{background-position:-40% 0}
+  100%{background-position:140% 0}
+}
+
+/* =========================================================================
+   3) OBWOD W NAGLOWKU - sciezki jak na plytce, impuls biegnie po nich
+   ========================================================================= */
+.volt-circuit{
+  position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;
+  /* Maska trzyma obwod z dala od kolumny z tekstem. Bez niej sciezki rozjasniaja
+     tlo pod naglowkiem i kontrast napisow spada ponizej progu - zmierzone
+     bramka wygladu (2.68:1 zamiast wymaganych 3.6:1). */
+  -webkit-mask-image:linear-gradient(90deg,transparent 0%,transparent 52%,#000 68%,#000 100%);
+          mask-image:linear-gradient(90deg,transparent 0%,transparent 52%,#000 68%,#000 100%);
+}
+@media (max-width:900px){
+  /* na telefonie tekst zajmuje cala szerokosc - obwod nie ma gdzie stanac */
+  .volt-circuit{display:none}
+}
+.vc-trace{fill:none;stroke:rgba(255,255,255,.13);stroke-width:1.4}
+.vc-pulse{
+  fill:none;stroke:var(--volt);stroke-width:2.4;stroke-linecap:round;
+  stroke-dasharray:34 1000;stroke-dashoffset:1034;
+  filter:drop-shadow(0 0 4px var(--volt)) drop-shadow(0 0 13px var(--volt-hot));
+  animation:volt-flow var(--d,7s) linear var(--dl,0s) infinite;
+}
+@keyframes volt-flow{from{stroke-dashoffset:1034}to{stroke-dashoffset:0}}
+.vc-node{
+  fill:var(--volt);opacity:.18;
+  filter:drop-shadow(0 0 6px var(--volt));
+  animation:volt-node 3.8s ease-in-out var(--dl,0s) infinite;
+}
+@keyframes volt-node{
+  0%,72%,100%{opacity:.16}
+  78%{opacity:.95}
+  84%{opacity:.3}
+  90%{opacity:.8}
+}
+
+/* Iskry rysowane na canvasie WEWNATRZ ciemnej sekcji (naglowek, pas awarii,
+   pas wspolpracy). Swiadomie NIE jest to nakladka na cale okno: element
+   position:fixed rozciagniety na ekran psuje pomiar kontrastu w bramkach
+   i zaslania tresc na telefonie. */
+/* ⚠️ `width/height:100%` NIE jest ozdobnikiem. <canvas> to element ZASTEPOWANY:
+   przy `position:absolute` i `width:auto` przegladarka bierze jego rozmiar WLASNY
+   (300x150 px), a `left:0;right:0` po prostu ignoruje. Bez tych dwoch wartosci plotno
+   iskier mialo 300x150 px w lewym gornym rogu sekcji - czyli dokladnie tam, gdzie
+   stoi tekst naglowka - i iskier praktycznie nie bylo widac (zmierzone 10.09.2026:
+   canvas 300x150 przy sekcji 1440x861). */
+.volt-sparks{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
+.awaria .wrap,.cta .wrap{position:relative;z-index:3}
+.awaria,.cta{position:relative;overflow:hidden}
+
+/* =========================================================================
+   4) ZAPLON NAGLOWKOW - jak startujaca swietlowka, raz przy wejsciu sekcji
+   ========================================================================= */
+@media (prefers-reduced-motion:no-preference){
+  .head.in h2,.head.in h3{animation:volt-ignite 1.25s ease-out 1 both}
+  .head.in .eyebrow::before{animation:volt-ignite-bar 1.25s steps(1,end) 1 both}
+}
+@keyframes volt-ignite{
+  0%{text-shadow:none}
+  6%{text-shadow:0 0 16px rgba(240,169,12,.85)}
+  11%{text-shadow:none}
+  19%{text-shadow:0 0 22px rgba(240,169,12,.9)}
+  26%{text-shadow:none}
+  41%{text-shadow:0 0 26px rgba(240,169,12,.7)}
+  100%{text-shadow:none}
+}
+@keyframes volt-ignite-bar{
+  0%,12%,26%{opacity:.15}
+  6%,19%,41%{opacity:1}
+  100%{opacity:1}
+}
+
+/* =========================================================================
+   5) PRZYCISKI POD NAPIECIEM - bursztynowa poswiata + drgnienie luku
+   ========================================================================= */
+@media (hover:hover){
+  .btn-accent:hover,.btn-light:hover,.sc-call:hover,.hf-phone:hover{
+    box-shadow:0 0 0 1px rgba(255,194,26,.55),0 8px 30px -8px rgba(255,122,24,.75),
+               0 0 22px -4px rgba(255,194,26,.55);
+  }
+  .btn-accent:hover{animation:volt-buzz .5s ease-out 1}
+}
+@keyframes volt-buzz{
+  0%,100%{filter:none}
+  14%{filter:brightness(1.35) saturate(1.1)}
+  22%{filter:none}
+  36%{filter:brightness(1.22)}
+  48%{filter:none}
+}
+
+/* numer w naglowku: cieply oddech swiatla, jak zywy styk pod napieciem.
+   ⛔ NIE ROBIC TEGO ROZCHODZACA SIE OBWODKA (`0 0 0 14px`): `.hf-phone` nie ma
+   zaokraglen, wiec `border-radius:inherit` dawalo ZERO i wokol numeru pulsowal
+   ostry bursztynowy PROSTOKAT - na zrzucie czyta sie jak zabladzona ramka, a nie
+   jak swiatlo (zlapane na zrzucie 10.09.2026). Poswiata jest rozmyta i zaokraglona,
+   a `box-shadow` idzie ZAWSZE na zewnatrz pudelka, wiec nie rozjasnia tla pod
+   cyframi i nie rusza pomiaru kontrastu w naglowku. */
+.hf-phone{position:relative}
+@media (prefers-reduced-motion:no-preference){
+  .hf-phone::before{
+    content:"";position:absolute;inset:-6px -12px;border-radius:16px;pointer-events:none;
+    box-shadow:0 0 0 0 rgba(255,194,26,0);
+    animation:volt-styk 3.4s ease-in-out infinite;
+  }
+}
+@keyframes volt-styk{
+  0%{box-shadow:0 0 0 0 rgba(255,194,26,0)}
+  24%{box-shadow:0 0 26px 3px rgba(255,194,26,.40)}
+  62%{box-shadow:0 0 34px 5px rgba(255,194,26,.10)}
+  100%{box-shadow:0 0 0 0 rgba(255,194,26,0)}
+}
+
+/* =========================================================================
+   6) LISTA ROBOT - przewod z lewej zapala sie i "grzeje" przy najechaniu
+   ========================================================================= */
+.fu-row::before{
+  background:linear-gradient(180deg,var(--volt),var(--volt-hot));
+  box-shadow:0 0 14px rgba(255,194,26,.75);
+}
+
+/* =========================================================================
+   7) KROKI PROCESU - prad plynie po linii laczacej etapy
+   ========================================================================= */
+.proces-line{position:relative}
+@media (min-width:821px) and (prefers-reduced-motion:no-preference){
+  .proces-line::after{
+    content:"";position:absolute;top:14px;left:12.5%;right:12.5%;height:1px;pointer-events:none;
+    background:linear-gradient(90deg,transparent 0%,var(--volt) 46%,var(--volt-arc) 50%,var(--volt) 54%,transparent 100%);
+    background-size:30% 100%;background-repeat:no-repeat;
+    filter:drop-shadow(0 0 6px rgba(255,194,26,.9));
+    animation:volt-run 4.4s linear infinite;
+  }
+}
+.proces-line li::after{box-shadow:0 0 0 4px var(--paper-2),0 0 12px rgba(240,169,12,.55)}
+
+/* =========================================================================
+   8) KAFLE PRZEJSCIOWE - obrys pod napieciem przy najechaniu
+   ========================================================================= */
+.gateway .g-ttl::before{
+  content:"";position:absolute;left:var(--space-5);right:var(--space-5);top:0;height:2px;
+  background:linear-gradient(90deg,var(--volt),var(--volt-hot));
+  box-shadow:0 0 12px rgba(255,194,26,.8);
+  transform:scaleX(0);transform-origin:left;
+  transition:transform .6s var(--cta-ease,cubic-bezier(.16,.84,.44,1));
+}
+@media (hover:hover){
+  .gateway:hover .g-ttl::before{transform:scaleX(1)}
+  .gateway:hover{box-shadow:0 0 0 1px rgba(255,194,26,.5),0 0 34px -10px rgba(255,122,24,.8)}
+}
+
+/* =========================================================================
+   9) PAS "AWARIA" i STOPKLATKA - przewod przebiegajacy przez cala szerokosc
+   ========================================================================= */
+@media (prefers-reduced-motion:no-preference){
+  .awaria::before,.stopklatka::before{
+    content:"";position:absolute;left:0;right:0;top:0;height:2px;z-index:3;pointer-events:none;
+    background:linear-gradient(90deg,transparent 0%,var(--volt) 46%,var(--volt-arc) 50%,var(--volt) 54%,transparent 100%);
+    background-size:28% 100%;background-repeat:no-repeat;
+    filter:drop-shadow(0 0 7px rgba(255,194,26,.95));
+    animation:volt-run 3.8s linear infinite;
+  }
+  .stopklatka{position:relative}
+  .stopklatka::before{top:auto;bottom:0;animation-duration:5.2s;animation-direction:reverse}
+}
+
+/* =========================================================================
+   10) MARKA W PASKU - typografia jak na grafice firmowej: grube, ciasne
+   ========================================================================= */
+.nav .brand .name{font-weight:800;letter-spacing:.1em}
+.nav .brand .sub{color:var(--volt)}
+.nav.nav-solid .brand .sub{color:var(--accent-d)}
+
+/* =========================================================================
+   11) SZACUNEK DLA USTAWIENIA "MNIEJ RUCHU"
+   ========================================================================= */
+@media (prefers-reduced-motion:reduce){
+  .volt-busbar,.volt-circuit,.volt-sparks{display:none}
+  .vc-pulse,.vc-node{animation:none}
+}
+
+/* Naglowek podstrony trzyma tytul na z-index 2 - warstwy ozdobne musza zostac pod nim,
+   inaczej iskry przechodza po literach i psuja pomiar kontrastu. */
+.pagehead .volt-sparks,.pagehead .volt-circuit{z-index:1}
+
+/* =========================================================================
+   12) DWIE DROBNE USTERKI RUCHU, ZMIERZONE BRAMKA WYGLADU
+   ========================================================================= */
+
+/* a) Kaskada wejscia (kafel po kaflu) siedziala na `transition-delay`, ktory
+      ZOSTAWAL na kaflu na zawsze - kazde pozniejsze najechanie myszka reagowalo
+      dopiero po 140-350 ms i czytalo sie jak zaciecie strony (zmierzone bramka).
+      Rozwiazanie: opoznienie obowiazuje WYLACZNIE w chwili wjazdu, czyli gdy
+      element ma juz `.in`, a jeszcze nie osiadl (`.mt-settled` dokłada silnik
+      1,6 s pozniej). Przegladarka czyta czasy przejscia ze stanu PO zmianie,
+      wiec kaskada dziala jak dotad, a hover jest natychmiastowy. */
+.reveal,
+.gallery .reveal:nth-child(n),
+.gateways .reveal:nth-child(n),
+.svc-grid .reveal:nth-child(n){transition-delay:0s}
+.reveal.in:not(.mt-settled),
+.gallery .reveal.in:not(.mt-settled):nth-child(n),
+.gateways .reveal.in:not(.mt-settled):nth-child(n),
+.svc-grid .reveal.in:not(.mt-settled):nth-child(n){
+  transition-delay:calc(var(--i,0) * var(--mt-step,70ms));
+}
+
+/* b) Wskaznik postepu w sekcji "Jak pracujemy" startowal z szerokoscia zero,
+      czyli byl ozdoba, ktorej nie widac. Zostawiamy widoczny poczatek toru. */
+.proces-os .proc-bar > i,.os-mech .proc-bar > i{min-width:3px}
+
+/* =========================================================================
+   13) STYK SEKCJI - przejscie miedzy sekcjami jako luk elektryczny
+   (prosba Szymona 10.09.2026: "animowane przejscia miedzy sekcjami i efekt
+   iskier - jak u klienta NIKO meble")
+
+   Jak to gra: w miejscu, gdzie konczy sie jedna sekcja a zaczyna druga,
+   siedzi niewidoczny styk. Gdy dojezdza do niego wzrok (sekcja wchodzi
+   w kadr), po styku przebiega luk: punkt zaplonu jedzie od lewej do prawej,
+   ciagnie za soba swiecacy przewod, sypie iskrami (canvas) i zostawia
+   krotki rozblysk, po ktorym wszystko gasnie. Kazdy styk gra RAZ.
+
+   Zasady, ktorych pilnujemy:
+   • ozdoby startuja z `opacity:0` - bramka wygladu odsiewa wtedy element
+     jako celowo ukryty i nie zglasza go jako "ozdoby o rozmiarze zero",
+   • `.styk` ma wysokosc 0 i nie zmienia ukladu strony ani o piksel,
+   • rozblysk jest SYMETRYCZNY wzgledem styku (polowa nad, polowa pod),
+     czyli lezy na marginesach sekcji, nie na tekscie,
+   • wszystko gasnie w ~1,5 s i nie zostawia nic na stale,
+   • przy `prefers-reduced-motion` warstwy nie ma wcale.
+   ========================================================================= */
+.styk{position:relative;z-index:6;height:0;pointer-events:none}
+
+/* PRZEWOD - rysuje sie od lewej razem z lukiem, potem gasnie */
+.styk-tor{
+  position:absolute;left:0;right:0;top:-1px;height:2px;opacity:0;
+  background:linear-gradient(90deg,var(--volt-hot) 0%,var(--volt) 32%,var(--volt-arc) 52%,var(--volt) 72%,rgba(255,194,26,0) 100%);
+  box-shadow:0 0 12px rgba(255,194,26,.55);
+  transform:scaleX(0);transform-origin:0 50%;
+}
+.styk.on .styk-tor{
+  animation:styk-tor .85s cubic-bezier(.5,.05,.3,1) both,
+            styk-gasnie .52s ease .9s both;
+}
+@keyframes styk-tor{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes styk-gasnie{from{opacity:1}to{opacity:0}}
+
+/* PUNKT ZAPLONU - jedzie w poprzek ekranu, z niego sypia sie iskry.
+   Szerokosc toru podaje skrypt (--styk-w), bo 100vw liczy tez pasek przewijania. */
+.styk-luk{
+  position:absolute;left:0;top:-7px;width:14px;height:14px;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,var(--volt-arc) 0%,var(--volt) 38%,rgba(255,122,24,.35) 62%,rgba(255,122,24,0) 74%);
+}
+/* Ruch i przygasanie w DWOCH osobnych animacjach. Jedna klatkowka z posrednimi
+   krokami (9%, 86%) rozbijala droge na odcinki, a przegladarka liczy krzywa
+   czasu OSOBNO dla kazdego odcinka - punkt zaplonu zostawal wtedy ~150 px za
+   czolem przewodu (zmierzone 10.09.2026). Rozdzielone animacje maja dokladnie
+   te sama krzywa co przewod, wiec iskra siedzi na jego koncu. */
+.styk.on .styk-luk{
+  animation:styk-luk .85s cubic-bezier(.5,.05,.3,1) both,
+            styk-luk-blask .85s ease both;
+}
+@keyframes styk-luk{
+  from{transform:translateX(0) scale(.75)}
+  to{transform:translateX(calc(var(--styk-w,100vw) - 14px)) scale(.85)}
+}
+@keyframes styk-luk-blask{
+  0%{opacity:0}8%{opacity:1}86%{opacity:1}100%{opacity:0}
+}
+
+/* ROZBLYSK - krotka luna swiatla wokol styku (polowa nad, polowa pod) */
+.styk-blysk{
+  position:absolute;left:0;right:0;top:-38px;height:76px;opacity:0;
+  background:linear-gradient(180deg,rgba(255,194,26,0) 0%,rgba(255,194,26,.16) 50%,rgba(255,194,26,0) 100%);
+  transform:scaleX(0);transform-origin:0 50%;
+  /* maska gasi PRAWY koniec luny - bez niej rozszerzajaca sie poswiata konczy sie
+     pionowa krecha uciecia tuz za iskra */
+  -webkit-mask-image:linear-gradient(90deg,#000 0%,#000 74%,transparent 100%);
+          mask-image:linear-gradient(90deg,#000 0%,#000 74%,transparent 100%);
+}
+.styk.ciemny .styk-blysk{
+  background:linear-gradient(180deg,rgba(255,194,26,0) 0%,rgba(255,194,26,.26) 50%,rgba(255,122,24,0) 100%);
+}
+/* Rozblysk ROZSZERZA SIE RAZEM Z LUKIEM (ta sama klatkowka scaleX i ta sama
+   krzywa co przewod) - luna zapalona z gory na calej szerokosci wyprzedzalaby
+   iskre i psula zludzenie, ze to ona niesie swiatlo. */
+.styk.on .styk-blysk{
+  animation:styk-tor .85s cubic-bezier(.5,.05,.3,1) both,
+            styk-blysk 1.5s ease-out .1s both;
+}
+@keyframes styk-blysk{0%{opacity:0}26%{opacity:1}100%{opacity:0}}
+
+/* ISKRY NA STYKU - ten sam silnik co w naglowku, tylko canvas jest pasem
+   rozpietym wokol styku (iskra ma gdzie poleciec w gore, zanim zgasnie). */
+.volt-sparks.iskry-styk{top:-84px;bottom:auto;left:0;right:0;width:100%;height:208px;z-index:7}
+
+@media (prefers-reduced-motion:reduce){
+  .styk{display:none}
+}
+
+/* =========================================================================
+   14) KRESKA POD NAGLOWKIEM SEKCJI - dociagana jak przewod pod napieciem
+   ========================================================================= */
+.head h2::after{
+  height:2px;
+  background:linear-gradient(90deg,var(--volt-hot) 0%,var(--volt) 100%);
+  box-shadow:0 0 10px rgba(255,194,26,.5);
+}
+.head.reveal.in h2::after,.head.center.reveal.in h2::after{width:64px}
+
+/* =========================================================================
+   15) PRZEJSCIE MIEDZY PODSTRONAMI - jak zapalajaca sie swietlowka
+   (u NIKO Meble to samo miejsce gra "przesunieciem deski"; tutaj strona
+   wchodzi z krotkim rozjasnieniem, jak swiatlo po pstryknieciu wylacznika)
+
+   Silnik ma juz wlasne przejscie (mtVtIn/mtVtOut) - ten blok stoi PO nim
+   w kolejnosci wczytywania, wiec wygrywa. Pasek nawigacji i stopka maja
+   wlasne nazwy (mt-nav, mt-foot) i zostaja nieruchome, wiec numer telefonu
+   nie mruga przy kazdym kliknieciu w menu.
+   ========================================================================= */
+@media (prefers-reduced-motion:no-preference){
+  ::view-transition-old(root){animation:volt-vt-out .2s ease both}
+  ::view-transition-new(root){animation:volt-vt-in .44s cubic-bezier(.16,1,.3,1) both}
+  @keyframes volt-vt-out{
+    from{opacity:1;filter:none}
+    to{opacity:0;filter:brightness(1.45)}
+  }
+  /* Rozjasnienie schodzi w pierwszej 1/4 drogi - dluzej wygladaloby jak przepalone
+     zdjecie, a nie jak zaplon. Ruch w pionie jest minimalny (10 px), zeby na
+     telefonie nie czytalo sie jak skakanie tresci. */
+  @keyframes volt-vt-in{
+    0%{opacity:0;filter:brightness(1.55) saturate(.65);transform:translateY(10px)}
+    26%{opacity:1;filter:brightness(1.06) saturate(.95)}
+    100%{opacity:1;filter:none;transform:translateY(0)}
+  }
+}
